@@ -1,5 +1,6 @@
 // Package imports:
 import 'package:booru_clients/shimmie2.dart';
+import 'package:coreutils/coreutils.dart';
 import 'package:path/path.dart' show extension;
 
 // Project imports:
@@ -37,11 +38,7 @@ Shimmie2Post postDtoToPost(
     score: e.score ?? e.numericScore ?? 0,
     duration: kNoduration,
     fileSize: e.filesize ?? 0,
-    format: switch ((e.ext, e.fileName)) {
-      (final ext?, _) => ext,
-      (_, final fileName?) => extension(fileName),
-      _ => '',
-    },
+    format: _resolveFormat(e),
     hasSound: null,
     height: e.height?.toDouble() ?? 0,
     md5: e.md5 ?? '',
@@ -76,3 +73,16 @@ Shimmie2Post postDtoToPost(
     myVote: e.myVote,
   );
 }
+
+// The XML API omits `ext` and reports the stored upload name, which has no
+// extension. Fall back to the file URL, which always carries the real one.
+String _resolveFormat(PostDto e) => switch ((
+  e.ext,
+  extension(e.fileName ?? ''),
+  urlExtension(e.fileUrl),
+)) {
+  (final ext?, _, _) when ext.isNotEmpty => ext,
+  (_, final nameExt, _) when nameExt.isNotEmpty => nameExt,
+  (_, _, final urlExt) when urlExt.isNotEmpty => urlExt,
+  _ => '',
+};
