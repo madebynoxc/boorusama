@@ -25,7 +25,17 @@ final shimmie2FavoriteRepoProvider =
                     : AddFavoriteStatus.failure,
               ),
           remove: (postId) => client.removeFavorite(postId: postId),
+          // Posts carry no per-user favorite state, so it is resolved in bulk
+          // through [filter] instead.
           isFavorited: (post) => false,
+          filter: (postIds) =>
+              switch (ref.read(shimmie2LoginDetailsProvider(config)).username) {
+                final username? => client.filterFavoritedPostIds(
+                  username: username,
+                  postIds: postIds,
+                ),
+                _ => Future.value(const <int>[]),
+              },
           canFavorite: () =>
               ref.read(shimmie2CanFavoriteProvider(config)).valueOrNull ??
               false,

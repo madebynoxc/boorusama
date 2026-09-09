@@ -15,6 +15,8 @@ import 'types/types.dart';
 
 const _kApiKeyParam = 'api_key';
 const _kAuthTokenParam = 'auth_token';
+const _kFavoriteLookupPageSize = 100;
+const _kFavoriteLookupMaxPages = 10;
 
 class Shimmie2Client {
   Shimmie2Client({
@@ -102,6 +104,38 @@ class Shimmie2Client {
       response,
       baseUrl: _dio.options.baseUrl,
     );
+  }
+
+  Future<List<int>> filterFavoritedPostIds({
+    required String username,
+    required List<int> postIds,
+  }) async {
+    if (username.isEmpty || postIds.isEmpty) return const [];
+
+    final minId = postIds.reduce((a, b) => a < b ? a : b);
+    final maxId = postIds.reduce((a, b) => a > b ? a : b);
+    final favorited = <int>{};
+
+    for (var page = 1; page <= _kFavoriteLookupMaxPages; page++) {
+      final response = await _dio.get(
+        '/api/danbooru/find_posts',
+        queryParameters: {
+          'tags': 'favorited_by=$username id>=$minId id<=$maxId',
+          'page': page,
+          'limit': _kFavoriteLookupPageSize,
+          ..._authParams,
+        },
+      );
+
+      final (total: total, ids: ids) = _parsePostIds(response);
+      favorited.addAll(ids);
+
+      if (ids.length < _kFavoriteLookupPageSize || favorited.length >= total) {
+        break;
+      }
+    }
+
+    return postIds.where(favorited.contains).toList();
   }
 
   Future<List<AutocompleteDto>> getAutocomplete({
@@ -373,6 +407,23 @@ Version? _parseShimmieVersionFromHeaders(Headers headers) {
 
   final version = RegExp(r'Shimmie-(\d+\.\d+\.\d+)').firstMatch(poweredBy);
   return Version.tryParse(version?.group(1));
+}
+
+({int total, List<int> ids}) _parsePostIds(Response value) {
+  final xmlDocument = XmlDocument.parse(value.data);
+  final root = xmlDocument.findAllElements('posts').firstOrNull;
+  final postElements = xmlDocument.findAllElements('post').toList();
+  final posts = postElements.isNotEmpty
+      ? postElements
+      : xmlDocument.findAllElements('tag');
+
+  return (
+    total: int.tryParse(root?.getAttribute('count') ?? '') ?? 0,
+    ids: posts
+        .map((e) => int.tryParse(e.getAttribute('id') ?? ''))
+        .whereType<int>()
+        .toList(),
+  );
 }
 
 FutureOr<List<PostDto>> _parsePosts(
